@@ -39,6 +39,7 @@
 #include "plib/gnw/input.h"
 #include "plib/gnw/intrface.h"
 #include "plib/gnw/memory.h"
+#include "plib/gnw/mouse.h"
 #include "plib/gnw/svga.h"
 
 namespace fallout {
@@ -270,6 +271,46 @@ int display_win;
 static std::vector<void*> map_global_pointers;
 static std::vector<void*> map_local_pointers;
 
+// CE: Interface bar "dock" mode: the map view covers the whole screen and the
+// interface bar floats over its bottom centre (Hi-Res Patch
+// `IFACE_BAR_MODE=1`). Must be set before `iso_init`.
+static bool iso_interface_dock = false;
+
+void iso_set_interface_dock(bool dock)
+{
+    iso_interface_dock = dock;
+}
+
+bool iso_is_interface_docked()
+{
+    return iso_interface_dock;
+}
+
+// CE: Height of the map view in pixels.
+int iso_view_height()
+{
+    int height = scr_size.lry - scr_size.uly + 1;
+    return iso_interface_dock ? height : height - INTERFACE_BAR_HEIGHT;
+}
+
+// CE: Whether the mouse hot spot is over the visible part of the map view
+// (in dock mode the interface bar covers part of it).
+bool iso_mouse_click_in_view()
+{
+    if (!mouse_click_in(0, 0, scr_size.lrx - scr_size.ulx, iso_view_height() - 1)) {
+        return false;
+    }
+
+    if (iso_interface_dock) {
+        int x;
+        int y;
+        mouse_get_position(&x, &y);
+        return win_get_top_win(x, y) == display_win;
+    }
+
+    return true;
+}
+
 // 0x4738E8
 int iso_init()
 {
@@ -279,7 +320,7 @@ int iso_init()
     // NOTE: Uninline.
     square_init();
 
-    display_win = win_add(0, 0, screenGetWidth(), screenGetHeight() - INTERFACE_BAR_HEIGHT, 256, 10);
+    display_win = win_add(0, 0, screenGetWidth(), iso_view_height(), 256, 10);
     if (display_win == -1) {
         debug_printf("win_add failed in iso_init\n");
         return -1;
@@ -303,14 +344,14 @@ int iso_init()
 
     debug_printf(">art_init\t\t");
 
-    if (tile_init(square, SQUARE_GRID_WIDTH, SQUARE_GRID_HEIGHT, HEX_GRID_WIDTH, HEX_GRID_HEIGHT, display_buf, scr_size.lrx - scr_size.ulx + 1, scr_size.lry - scr_size.uly - 99, scr_size.lrx - scr_size.ulx + 1, map_display_draw) != 0) {
+    if (tile_init(square, SQUARE_GRID_WIDTH, SQUARE_GRID_HEIGHT, HEX_GRID_WIDTH, HEX_GRID_HEIGHT, display_buf, scr_size.lrx - scr_size.ulx + 1, iso_view_height(), scr_size.lrx - scr_size.ulx + 1, map_display_draw) != 0) {
         debug_printf("tile_init failed in iso_init\n");
         return -1;
     }
 
     debug_printf(">tile_init\t\t");
 
-    if (obj_init(display_buf, scr_size.lrx - scr_size.ulx + 1, scr_size.lry - scr_size.uly - 99, scr_size.lrx - scr_size.ulx + 1) != 0) {
+    if (obj_init(display_buf, scr_size.lrx - scr_size.ulx + 1, iso_view_height(), scr_size.lrx - scr_size.ulx + 1) != 0) {
         debug_printf("obj_init failed in iso_init\n");
         return -1;
     }
@@ -750,7 +791,7 @@ int map_scroll(int dx, int dy)
 
     int width = scr_size.lrx - scr_size.ulx + 1;
     int pitch = width;
-    int height = scr_size.lry - scr_size.uly - 99;
+    int height = iso_view_height();
 
     if (screenDx != 0) {
         width -= 32;
@@ -772,7 +813,7 @@ int map_scroll(int dx, int dy)
     if (screenDy < 0) {
         r1.lry = r1.uly - screenDy;
         src = display_buf + pitch * (height - 1);
-        dest = display_buf + pitch * (scr_size.lry - scr_size.uly - 100);
+        dest = display_buf + pitch * (iso_view_height() - 1);
         if (screenDx < 0) {
             dest -= screenDx;
         } else {

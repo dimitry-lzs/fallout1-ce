@@ -2,6 +2,8 @@
 
 #include <string.h>
 
+#include <algorithm>
+
 #include <SDL.h>
 
 #include "game/gconfig.h"
@@ -122,6 +124,14 @@ static MovieStartFunc* startMovieFunc;
 
 // 0x6373E4
 static int subtitleW;
+
+// CE: How movies played in direct mode are fitted into their window, see
+// `movieSetWindowScaleMode`.
+static int movieWindowScaleMode = MOVIE_WINDOW_SCALE_NONE;
+
+// CE: Subtitle text drawn over scaled movie frames (window coordinates).
+static bool subtitleOverlayActive = false;
+static Rect subtitleOverlayRect;
 
 // 0x637398
 static int lastMovieBH;
@@ -246,9 +256,84 @@ static bool movieRead(void* handle, void* buf, int count)
     return db_fread(buf, 1, count, reinterpret_cast<DB_FILE*>(handle)) == count;
 }
 
+// CE: Draws a movie frame scaled into the movie window (nearest neighbour,
+// straight into the 8-bit screen surface), then any subtitle on top of it.
+static void showScaledFrame(SDL_Surface* surface, int srcWidth, int srcHeight, int srcX, int srcY)
+{
+    int winWidth = winRect.lrx - winRect.ulx + 1;
+    int winHeight = winRect.lry - winRect.uly + 1;
+    if (srcWidth <= 0 || srcHeight <= 0 || winWidth <= 0 || winHeight <= 0) {
+        return;
+    }
+
+    int destWidth;
+    int destHeight;
+    if (movieWindowScaleMode == MOVIE_WINDOW_SCALE_STRETCH) {
+        destWidth = winWidth;
+        destHeight = winHeight;
+    } else if (srcWidth * winHeight > winWidth * srcHeight) {
+        destWidth = winWidth;
+        destHeight = srcHeight * winWidth / srcWidth;
+    } else {
+        destWidth = srcWidth * winHeight / srcHeight;
+        destHeight = winHeight;
+    }
+
+    int destX = (winWidth - destWidth) / 2;
+    int destY = (winHeight - destHeight) / 2;
+
+    lastMovieSX = srcX;
+    lastMovieSY = srcY;
+    lastMovieX = destX;
+    lastMovieY = destY;
+    lastMovieBW = srcWidth;
+    lastMovieBH = srcHeight;
+    lastMovieW = destWidth;
+    lastMovieH = destHeight;
+    gMovieSdlSurface = surface;
+
+    if (SDL_LockSurface(surface) != 0) {
+        return;
+    }
+
+    unsigned char* screen = static_cast<unsigned char*>(gSdlSurface->pixels)
+        + gSdlSurface->pitch * winRect.uly
+        + winRect.ulx;
+
+    scale_buf_to_buf(static_cast<unsigned char*>(surface->pixels) + surface->pitch * srcY + srcX,
+        srcWidth,
+        srcHeight,
+        surface->pitch,
+        screen + gSdlSurface->pitch * destY + destX,
+        destWidth,
+        destHeight,
+        gSdlSurface->pitch);
+
+    SDL_UnlockSurface(surface);
+
+    if (subtitleOverlayActive && (movieFlags & MOVIE_EXTENDED_FLAG_0x10) != 0) {
+        // Text pixels are non-zero, the subtitle background is 0.
+        int windowWidth = win_width(GNWWin);
+        trans_buf_to_buf(win_get_buf(GNWWin) + windowWidth * subtitleOverlayRect.uly + subtitleOverlayRect.ulx,
+            subtitleOverlayRect.lrx - subtitleOverlayRect.ulx,
+            subtitleOverlayRect.lry - subtitleOverlayRect.uly,
+            windowWidth,
+            screen + gSdlSurface->pitch * subtitleOverlayRect.uly + subtitleOverlayRect.ulx,
+            gSdlSurface->pitch);
+    }
+
+    SDL_BlitSurface(gSdlSurface, NULL, gSdlTextureSurface, NULL);
+    renderPresent();
+}
+
 // 0x478464
 static void movie_MVE_ShowFrame(SDL_Surface* surface, int srcWidth, int srcHeight, int srcX, int srcY, int destWidth, int destHeight, int a8, int a9)
 {
+    if (movieWindowScaleMode != MOVIE_WINDOW_SCALE_NONE && !movieScaleFlag) {
+        showScaledFrame(surface, srcWidth, srcHeight, srcX, srcY);
+        return;
+    }
+
     int v14;
     int v15;
 
@@ -561,6 +646,7 @@ static void cleanupMovie(int a1)
     }
 
     running = 0;
+    subtitleOverlayActive = false;
     movieSubRectFlag = 0;
     movieScaleFlag = 0;
     movieAlphaFlag = 0;
@@ -624,6 +710,11 @@ int movieSetFlags(int flags)
     }
 
     return 0;
+}
+
+void movieSetWindowScaleMode(int mode)
+{
+    movieWindowScaleMode = mode;
 }
 
 // 0x47901C
@@ -765,7 +856,15 @@ static void doSubtitle()
     int v1 = text_height();
     int v2 = (480 - lastMovieH - lastMovieY - v1) / 2 + lastMovieH + lastMovieY;
 
-    if (subtitleH + v2 > windowGetYres()) {
+    bool overlay = movieWindowScaleMode != MOVIE_WINDOW_SCALE_NONE && !movieScaleFlag;
+    if (overlay) {
+        // CE: The scaled movie may cover the whole window, so place the
+        // subtitle near the bottom (always inside the window) and draw it
+        // over the frames.
+        int windowHeight = win_height(GNWWin);
+        v2 = std::min((windowHeight - lastMovieH - lastMovieY - v1) / 2 + lastMovieH + lastMovieY,
+            windowHeight - subtitleH - v1);
+    } else if (subtitleH + v2 > windowGetYres()) {
         subtitleH = windowGetYres() - v2;
     }
 
@@ -796,7 +895,12 @@ static void doSubtitle()
         rect.uly = v2;
         rect.lry = v2 + subtitleH;
         rect.ulx = 0;
-        win_draw_rect(GNWWin, &rect);
+        if (overlay) {
+            subtitleOverlayRect = rect;
+            subtitleOverlayActive = true;
+        } else {
+            win_draw_rect(GNWWin, &rect);
+        }
 
         myfree(subtitleList->text, __FILE__, __LINE__); // "..\\int\\MOVIE.C", 1108
         myfree(subtitleList, __FILE__, __LINE__); // "..\\int\\MOVIE.C", 1109

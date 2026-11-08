@@ -330,6 +330,36 @@ void buf_outline(unsigned char* buf, int width, int height, int pitch, int color
     }
 }
 
+// CE: Nearest-neighbour scaling that, unlike `cscale`, covers every
+// destination pixel (`cscale` can leave the last row and column untouched).
+static void scaleBuf(unsigned char* src, int srcWidth, int srcHeight, int srcPitch, unsigned char* dest, int destWidth, int destHeight, int destPitch, bool transparent)
+{
+    if (srcWidth <= 0 || srcHeight <= 0 || destWidth <= 0 || destHeight <= 0) {
+        return;
+    }
+
+    for (int destY = 0; destY < destHeight; destY++) {
+        unsigned char* currSrc = src + srcPitch * (int)((long long)destY * srcHeight / destHeight);
+        unsigned char* currDest = dest + destPitch * destY;
+        for (int destX = 0; destX < destWidth; destX++) {
+            unsigned char c = currSrc[(long long)destX * srcWidth / destWidth];
+            if (!transparent || c != 0) {
+                currDest[destX] = c;
+            }
+        }
+    }
+}
+
+void scale_buf_to_buf(unsigned char* src, int srcWidth, int srcHeight, int srcPitch, unsigned char* dest, int destWidth, int destHeight, int destPitch)
+{
+    scaleBuf(src, srcWidth, srcHeight, srcPitch, dest, destWidth, destHeight, destPitch, false);
+}
+
+void trans_scale_buf_to_buf(unsigned char* src, int srcWidth, int srcHeight, int srcPitch, unsigned char* dest, int destWidth, int destHeight, int destPitch)
+{
+    scaleBuf(src, srcWidth, srcHeight, srcPitch, dest, destWidth, destHeight, destPitch, true);
+}
+
 // 0x4CDB50
 void srcCopy(unsigned char* dest, int destPitch, unsigned char* src, int srcPitch, int width, int height)
 {

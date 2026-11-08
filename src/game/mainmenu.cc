@@ -4,6 +4,9 @@
 #include <limits.h>
 #include <string.h>
 
+#include <algorithm>
+#include <vector>
+
 #include "game/art.h"
 #include "game/game.h"
 #include "game/gsound.h"
@@ -15,6 +18,7 @@
 #include "plib/gnw/gnw.h"
 #include "plib/gnw/grbuf.h"
 #include "plib/gnw/input.h"
+#include "plib/gnw/memory.h"
 #include "plib/gnw/svga.h"
 #include "plib/gnw/text.h"
 
@@ -92,6 +96,22 @@ static CacheEntry* button_down_key;
 // 0x612DE0
 static CacheEntry* background_key;
 
+// CE: How the main menu is fitted to the screen (`[MAINMENU] MAIN_MENU_SIZE`).
+// 0 - original 640x480 in the centre, 1 - hi-res background covering the
+// screen with the button panel scaled to the screen height, 2 - original art
+// scaled to fit (bars), 3 - original art stretched to fill.
+static int main_menu_size_mode = 0;
+
+// CE: Scaled copies of the button art (the up image also serves as the
+// button mask, so it must outlive the buttons).
+static std::vector<unsigned char> scaled_button_up;
+static std::vector<unsigned char> scaled_button_down;
+
+void main_menu_set_size_mode(int mode)
+{
+    main_menu_size_mode = mode >= 0 && mode <= 3 ? mode : 0;
+}
+
 // 0x472F80
 int main_menu_create()
 {
@@ -105,12 +125,55 @@ int main_menu_create()
 
     loadColorTable("color.pal");
 
-    int mainMenuWindowX = (screenGetWidth() - MAIN_MENU_WINDOW_WIDTH) / 2;
-    int mainMenuWindowY = (screenGetHeight() - MAIN_MENU_WINDOW_HEIGHT) / 2;
+    int screenWidth = screenGetWidth();
+    int screenHeight = screenGetHeight();
+
+    // The hi-res mode needs the Hi-Res Patch art (shipped with GOG).
+    Art* hiresBackground = NULL;
+    Art* hiresPanel = NULL;
+    int mode = main_menu_size_mode;
+    if (mode == 1) {
+        hiresBackground = load_frame("art\\intrface\\HR_MAINMENU.frm");
+        hiresPanel = load_frame("art\\intrface\\HR_MENU_BG.FRM");
+        if (hiresBackground == NULL || hiresPanel == NULL) {
+            mode = 2;
+        }
+    }
+
+    // Menu content is laid out on a "layer" in original pixel units, then
+    // scaled by (scaleX, scaleY) to the screen. Hi-res mode stretches the
+    // layer to the screen's shape so the panel can sit at the right edge.
+    int layerWidth = MAIN_MENU_WINDOW_WIDTH;
+    int layerHeight = MAIN_MENU_WINDOW_HEIGHT;
+    double scaleX = 1.0;
+    double scaleY = 1.0;
+    if (mode == 1) {
+        scaleX = scaleY = std::min(screenWidth / 640.0, screenHeight / 480.0);
+        layerWidth = std::max(static_cast<int>(screenWidth / scaleX), MAIN_MENU_WINDOW_WIDTH);
+        layerHeight = std::max(static_cast<int>(screenHeight / scaleY), MAIN_MENU_WINDOW_HEIGHT);
+    } else if (mode == 2) {
+        scaleX = scaleY = std::min(screenWidth / 640.0, screenHeight / 480.0);
+    } else if (mode == 3) {
+        scaleX = screenWidth / 640.0;
+        scaleY = screenHeight / 480.0;
+    }
+
+    int windowWidth = mode == 0 ? MAIN_MENU_WINDOW_WIDTH : screenWidth;
+    int windowHeight = mode == 0 ? MAIN_MENU_WINDOW_HEIGHT : screenHeight;
+    int layerX = (windowWidth - static_cast<int>(layerWidth * scaleX)) / 2;
+    int layerY = (windowHeight - static_cast<int>(layerHeight * scaleY)) / 2;
+
+    // Offset of the original right-side content (panel, buttons, labels,
+    // version) in the layer.
+    int dx = layerWidth - MAIN_MENU_WINDOW_WIDTH;
+    int dy = (layerHeight - MAIN_MENU_WINDOW_HEIGHT) / 2;
+
+    int mainMenuWindowX = (screenWidth - windowWidth) / 2;
+    int mainMenuWindowY = (screenHeight - windowHeight) / 2;
     main_window = win_add(mainMenuWindowX,
         mainMenuWindowY,
-        MAIN_MENU_WINDOW_WIDTH,
-        MAIN_MENU_WINDOW_HEIGHT,
+        windowWidth,
+        windowHeight,
         0,
         WINDOW_HIDDEN | WINDOW_MOVE_ON_TOP);
     if (main_window == -1) {
@@ -120,20 +183,40 @@ int main_menu_create()
 
     main_window_buf = win_get_buf(main_window);
 
-    // mainmenu.frm
-    int backgroundFid = art_id(OBJ_TYPE_INTERFACE, 140, 0, 0, 0);
-    background_data = art_ptr_lock_data(backgroundFid, 0, 0, &background_key);
-    if (background_data == NULL) {
-        // NOTE: Uninline.
-        return main_menu_fatal_error();
+    // Scaled modes draw into a temporary off-screen window first.
+    int layerWindow = main_window;
+    if (mode != 0) {
+        layerWindow = win_add(0, 0, layerWidth, layerHeight, 0, WINDOW_HIDDEN);
+        if (layerWindow == -1) {
+            return main_menu_fatal_error();
+        }
     }
+    unsigned char* layerBuf = win_get_buf(layerWindow);
 
-    buf_to_buf(background_data, MAIN_MENU_WINDOW_WIDTH,
-        MAIN_MENU_WINDOW_HEIGHT,
-        MAIN_MENU_WINDOW_WIDTH,
-        main_window_buf,
-        MAIN_MENU_WINDOW_WIDTH);
-    art_ptr_unlock(background_key);
+    if (mode == 1) {
+        int panelWidth = art_frame_width(hiresPanel, 0, 0);
+        int panelHeight = art_frame_length(hiresPanel, 0, 0);
+        // Hi-Res Patch places the panel 24px up-left of the first button.
+        int panelX = dx + 425 - 24;
+        int panelY = dy + 45 - 24;
+        trans_buf_to_buf(art_frame_data(hiresPanel, 0, 0), panelWidth, panelHeight, panelWidth,
+            layerBuf + layerWidth * panelY + panelX, layerWidth);
+    } else {
+        // mainmenu.frm
+        int backgroundFid = art_id(OBJ_TYPE_INTERFACE, 140, 0, 0, 0);
+        background_data = art_ptr_lock_data(backgroundFid, 0, 0, &background_key);
+        if (background_data == NULL) {
+            // NOTE: Uninline.
+            return main_menu_fatal_error();
+        }
+
+        buf_to_buf(background_data, MAIN_MENU_WINDOW_WIDTH,
+            MAIN_MENU_WINDOW_HEIGHT,
+            MAIN_MENU_WINDOW_WIDTH,
+            layerBuf,
+            layerWidth);
+        art_ptr_unlock(background_key);
+    }
 
     int oldFont = text_curr();
     text_font(100);
@@ -141,14 +224,14 @@ int main_menu_create()
     // Copyright.
     msg.num = 14;
     if (message_search(&misc_message_file, &msg)) {
-        win_print(main_window, msg.text, 0, 15, 460, colorTable[21204] | 0x4000000 | 0x2000000);
+        win_print(layerWindow, msg.text, 0, 15, layerHeight - 20, colorTable[21204] | 0x4000000 | 0x2000000);
     }
 
     // Version.
     char version[VERSION_MAX];
     getverstr(version, sizeof(version));
     len = text_width(version);
-    win_print(main_window, version, 0, 615 - len, 460, colorTable[21204] | 0x4000000 | 0x2000000);
+    win_print(layerWindow, version, 0, dx + 615 - len, layerHeight - 20, colorTable[21204] | 0x4000000 | 0x2000000);
 
     // menuup.frm
     fid = art_id(OBJ_TYPE_INTERFACE, 299, 0, 0, 0);
@@ -166,22 +249,96 @@ int main_menu_create()
         return main_menu_fatal_error();
     }
 
+    text_font(104);
+
+    for (int index = 0; index < MAIN_MENU_BUTTON_COUNT; index++) {
+        msg.num = 9 + index;
+        if (message_search(&misc_message_file, &msg)) {
+            len = text_width(msg.text);
+            int labelX = dx + 520 - (len / 2);
+            text_to_buf(layerBuf + layerWidth * (dy + 42 * index - index + 46) + labelX,
+                msg.text,
+                layerWidth - labelX - 1,
+                layerWidth,
+                colorTable[21091]);
+        }
+    }
+
+    text_font(oldFont);
+
+    // Compose the scaled menu.
+    unsigned char* buttonUp = button_up_data;
+    unsigned char* buttonDown = button_down_data;
+    int buttonWidth = 26;
+    int buttonHeight = 26;
+    if (mode != 0) {
+        int layerScaledWidth = static_cast<int>(layerWidth * scaleX);
+        int layerScaledHeight = static_cast<int>(layerHeight * scaleY);
+
+        if (mode == 1) {
+            // Background covers the whole window, cropped evenly.
+            int bgWidth = art_frame_width(hiresBackground, 0, 0);
+            int bgHeight = art_frame_length(hiresBackground, 0, 0);
+            double bgScale = std::max(windowWidth / static_cast<double>(bgWidth), windowHeight / static_cast<double>(bgHeight));
+            int cropWidth = std::min(static_cast<int>(windowWidth / bgScale), bgWidth);
+            int cropHeight = std::min(static_cast<int>(windowHeight / bgScale), bgHeight);
+            unsigned char* bgData = art_frame_data(hiresBackground, 0, 0);
+            scale_buf_to_buf(bgData + bgWidth * ((bgHeight - cropHeight) / 2) + (bgWidth - cropWidth) / 2,
+                cropWidth,
+                cropHeight,
+                bgWidth,
+                main_window_buf,
+                windowWidth,
+                windowHeight,
+                windowWidth);
+            trans_scale_buf_to_buf(layerBuf, layerWidth, layerHeight, layerWidth,
+                main_window_buf + windowWidth * layerY + layerX,
+                layerScaledWidth,
+                layerScaledHeight,
+                windowWidth);
+        } else {
+            scale_buf_to_buf(layerBuf, layerWidth, layerHeight, layerWidth,
+                main_window_buf + windowWidth * layerY + layerX,
+                layerScaledWidth,
+                layerScaledHeight,
+                windowWidth);
+        }
+
+        win_delete(layerWindow);
+
+        buttonWidth = std::max(static_cast<int>(26 * scaleX), 1);
+        buttonHeight = std::max(static_cast<int>(26 * scaleY), 1);
+        scaled_button_up.assign(buttonWidth * buttonHeight, 0);
+        scaled_button_down.assign(buttonWidth * buttonHeight, 0);
+        scale_buf_to_buf(button_up_data, 26, 26, 26, scaled_button_up.data(), buttonWidth, buttonHeight, buttonWidth);
+        scale_buf_to_buf(button_down_data, 26, 26, 26, scaled_button_down.data(), buttonWidth, buttonHeight, buttonWidth);
+        buttonUp = scaled_button_up.data();
+        buttonDown = scaled_button_down.data();
+    }
+
+    if (hiresBackground != NULL) {
+        mem_free(hiresBackground);
+    }
+    if (hiresPanel != NULL) {
+        mem_free(hiresPanel);
+    }
+
     for (int index = 0; index < MAIN_MENU_BUTTON_COUNT; index++) {
         buttons[index] = -1;
     }
 
     for (int index = 0; index < MAIN_MENU_BUTTON_COUNT; index++) {
         buttons[index] = win_register_button(main_window,
-            425,
-            index * 42 - index + 45,
-            26,
-            26,
+            layerX + static_cast<int>((dx + 425) * scaleX),
+            layerY + static_cast<int>((dy + index * 42 - index + 45) * scaleY),
+            buttonWidth,
+            buttonHeight,
             -1,
             -1,
             1111,
             button_values[index],
-            button_up_data,
-            button_down_data,
+            buttonUp,
+            buttonDown,
             NULL,
             BUTTON_FLAG_TRANSPARENT);
         if (buttons[index] == -1) {
@@ -189,24 +346,8 @@ int main_menu_create()
             return main_menu_fatal_error();
         }
 
-        win_register_button_mask(buttons[index], button_up_data);
+        win_register_button_mask(buttons[index], buttonUp);
     }
-
-    text_font(104);
-
-    for (int index = 0; index < MAIN_MENU_BUTTON_COUNT; index++) {
-        msg.num = 9 + index;
-        if (message_search(&misc_message_file, &msg)) {
-            len = text_width(msg.text);
-            text_to_buf(main_window_buf + MAIN_MENU_WINDOW_WIDTH * (42 * index - index + 46) + 520 - (len / 2),
-                msg.text,
-                MAIN_MENU_WINDOW_WIDTH - (520 - (len / 2)) - 1,
-                MAIN_MENU_WINDOW_WIDTH,
-                colorTable[21091]);
-        }
-    }
-
-    text_font(oldFont);
 
     main_menu_created = true;
     main_menu_is_hidden = true;

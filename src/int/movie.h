@@ -39,6 +39,17 @@ void initMovie();
 void movieClose();
 void movieStop();
 int movieSetFlags(int a1);
+
+// CE: Scaling of movies played in direct mode into their window.
+enum MovieWindowScaleMode {
+    MOVIE_WINDOW_SCALE_NONE = 0,
+    // Largest size that fits, keeping the aspect ratio.
+    MOVIE_WINDOW_SCALE_FIT = 1,
+    // Fill the whole window.
+    MOVIE_WINDOW_SCALE_STRETCH = 2,
+};
+
+void movieSetWindowScaleMode(int mode);
 void movieSetSubtitleFont(int font);
 void movieSetSubtitleColor(float r, float g, float b);
 void movieSetPaletteFunc(MoviePaletteFunc* func);

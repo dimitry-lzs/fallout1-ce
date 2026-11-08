@@ -19,6 +19,7 @@ typedef enum MainMenuOption {
 extern bool in_main_menu;
 
 int main_menu_create();
+void main_menu_set_size_mode(int mode);
 void main_menu_destroy();
 void main_menu_hide(bool animate);
 void main_menu_show(bool animate);

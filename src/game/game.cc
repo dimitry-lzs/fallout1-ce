@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <algorithm>
+
 #include "game/actions.h"
 #include "game/anim.h"
 #include "game/automap.h"
@@ -25,6 +27,7 @@
 #include "game/inventry.h"
 #include "game/item.h"
 #include "game/loadsave.h"
+#include "game/mainmenu.h"
 #include "game/map.h"
 #include "game/moviefx.h"
 #include "game/object.h"
@@ -146,20 +149,38 @@ int game_init(const char* windowTitle, bool isMapper, int font, int flags, int a
     VideoOptions video_options;
     video_options.width = 640;
     video_options.height = 480;
+    video_options.windowWidth = 0;
+    video_options.windowHeight = 0;
     video_options.fullscreen = true;
+    video_options.fullscreenDesktop = false;
+    video_options.keepDesktopMode = false;
     video_options.scale = 1;
+    video_options.fit = SCREEN_FIT_ASPECT;
+    video_options.linearFilter = false;
 
     Config resolutionConfig;
     if (config_init(&resolutionConfig)) {
         if (config_load(&resolutionConfig, "f1_res.ini", false)) {
-            int screenWidth;
-            if (config_get_value(&resolutionConfig, "MAIN", "SCR_WIDTH", &screenWidth)) {
-                video_options.width = std::max(screenWidth, 640);
+            int scaleValue;
+            if (config_get_value(&resolutionConfig, "MAIN", "SCALE_2X", &scaleValue)) {
+                // 0 - 1x, 1 - 2x, 2 - 3x, ...
+                video_options.scale = std::clamp(scaleValue + 1, 1, 8);
             }
 
-            int screenHeight;
-            if (config_get_value(&resolutionConfig, "MAIN", "SCR_HEIGHT", &screenHeight)) {
-                video_options.height = std::max(screenHeight, 480);
+            // SCR_WIDTH/SCR_HEIGHT are window sizes, the game resolution is
+            // that divided by the scale. 0 means fit the screen.
+            int screenWidth = 640 * video_options.scale;
+            int screenHeight = 480 * video_options.scale;
+            config_get_value(&resolutionConfig, "MAIN", "SCR_WIDTH", &screenWidth);
+            config_get_value(&resolutionConfig, "MAIN", "SCR_HEIGHT", &screenHeight);
+            if (screenWidth <= 0 || screenHeight <= 0) {
+                video_options.width = 0;
+                video_options.height = 0;
+            } else {
+                video_options.windowWidth = screenWidth;
+                video_options.windowHeight = screenHeight;
+                video_options.width = std::max(screenWidth / video_options.scale, 640);
+                video_options.height = std::max(screenHeight / video_options.scale, 480);
             }
 
             bool windowed;
@@ -167,12 +188,36 @@ int game_init(const char* windowTitle, bool isMapper, int font, int flags, int a
                 video_options.fullscreen = !windowed;
             }
 
-            int scaleValue;
-            if (config_get_value(&resolutionConfig, "MAIN", "SCALE_2X", &scaleValue)) {
-                video_options.scale = scaleValue + 1;
-                video_options.width /= video_options.scale;
-                video_options.height /= video_options.scale;
+            configGetBool(&resolutionConfig, "MAIN", "WINDOWED_FULLSCREEN", &(video_options.fullscreenDesktop));
+            configGetBool(&resolutionConfig, "MAIN", "KEEP_DESKTOP_MODE", &(video_options.keepDesktopMode));
+
+            int fit;
+            if (config_get_value(&resolutionConfig, "MAIN", "SCREEN_FIT", &fit)) {
+                video_options.fit = std::clamp(fit, static_cast<int>(SCREEN_FIT_ASPECT), static_cast<int>(SCREEN_FIT_INTEGER));
             }
+
+            configGetBool(&resolutionConfig, "MAIN", "SCALE_FILTER", &(video_options.linearFilter));
+
+            // Names below follow the Hi-Res Patch so its f1_res.ini works.
+            int movieSize;
+            if (config_get_value(&resolutionConfig, "MOVIES", "MOVIE_SIZE", &movieSize)) {
+                gmovie_set_size_mode(movieSize);
+            }
+
+            int mainMenuSize;
+            if (config_get_value(&resolutionConfig, "MAINMENU", "MAIN_MENU_SIZE", &mainMenuSize)) {
+                main_menu_set_size_mode(mainMenuSize);
+            }
+
+            int barMode = 0;
+            config_get_value(&resolutionConfig, "IFACE", "IFACE_BAR_MODE", &barMode);
+            iso_set_interface_dock(barMode != 0);
+
+            int sideArt = 0;
+            int sidesOrigin = 0;
+            config_get_value(&resolutionConfig, "IFACE", "IFACE_BAR_SIDE_ART", &sideArt);
+            config_get_value(&resolutionConfig, "IFACE", "IFACE_BAR_SIDES_ORI", &sidesOrigin);
+            intface_set_side_art(sideArt, sidesOrigin != 0);
         }
         config_exit(&resolutionConfig);
     }

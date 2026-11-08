@@ -1,4 +1,5 @@
 #include "game/intface.h"
+#include "game/map.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -386,6 +387,105 @@ static unsigned char* inventoryButtonDown;
 // 0x59B994
 static unsigned char movePointBackground[90 * 5];
 
+// CE: Hi-Res Patch style art filling the screen on both sides of the
+// interface bar when the screen is wider than 640 (`IFACE_BAR_SIDE_ART`):
+// 0 - none (black), 1 - metal, 2 - leather.
+static int intfaceSideArt = 0;
+
+// CE: Anchor the side art at the screen edges instead of at the bar
+// (`IFACE_BAR_SIDES_ORI`).
+static bool intfaceSidesFromScreenEdges = false;
+
+// CE: Left and right side windows.
+static int intfaceSideWindows[2] = { -1, -1 };
+
+void intface_set_side_art(int art, bool fromScreenEdges)
+{
+    intfaceSideArt = art >= 0 && art <= 2 ? art : 0;
+    intfaceSidesFromScreenEdges = fromScreenEdges;
+}
+
+// CE: Creates (hidden) side windows next to the interface bar and fills them
+// with the side art. Wider gaps repeat the art.
+static void intface_side_windows_init(int barX, int barY)
+{
+    // Docked bar has the map visible on both sides.
+    if (intfaceSideArt == 0 || iso_is_interface_docked()) {
+        return;
+    }
+
+    static const char* sideArtPaths[2][2] = {
+        { "art\\intrface\\HR_IFACELFT1.FRM", "art\\intrface\\HR_IFACERHT1.FRM" },
+        { "art\\intrface\\HR_IFACELFT2.FRM", "art\\intrface\\HR_IFACERHT2.FRM" },
+    };
+
+    int sideX[2] = { 0, barX + INTERFACE_BAR_WIDTH };
+    int sideWidth[2] = { barX, screenGetWidth() - (barX + INTERFACE_BAR_WIDTH) };
+
+    for (int side = 0; side < 2; side++) {
+        if (sideWidth[side] <= 0) {
+            continue;
+        }
+
+        Art* art = load_frame(sideArtPaths[intfaceSideArt - 1][side]);
+        if (art == NULL) {
+            debug_printf("\nintface_side_windows_init: missing %s", sideArtPaths[intfaceSideArt - 1][side]);
+            continue;
+        }
+
+        int artWidth = art_frame_width(art, 0, 0);
+        int artHeight = art_frame_length(art, 0, 0);
+        unsigned char* artData = art_frame_data(art, 0, 0);
+
+        int win = win_add(sideX[side], barY, sideWidth[side], INTERFACE_BAR_HEIGHT, colorTable[0], WINDOW_HIDDEN);
+        if (win != -1 && artWidth > 0 && artData != NULL) {
+            unsigned char* buffer = win_get_buf(win);
+            int width = sideWidth[side];
+
+            // Columns next to the anchor come from the art's matching edge:
+            // the left art's right edge and the right art's left edge touch
+            // the bar.
+            bool anchorRight = (side == 0) != intfaceSidesFromScreenEdges;
+
+            int rows = std::min(artHeight, INTERFACE_BAR_HEIGHT);
+            for (int x = 0; x < width; x++) {
+                int column = anchorRight
+                    ? artWidth - 1 - (width - 1 - x) % artWidth
+                    : x % artWidth;
+                for (int y = 0; y < rows; y++) {
+                    buffer[y * width + x] = artData[y * artWidth + column];
+                }
+            }
+        }
+
+        intfaceSideWindows[side] = win;
+        mem_free(art);
+    }
+}
+
+static void intface_side_windows_exit()
+{
+    for (int side = 0; side < 2; side++) {
+        if (intfaceSideWindows[side] != -1) {
+            win_delete(intfaceSideWindows[side]);
+            intfaceSideWindows[side] = -1;
+        }
+    }
+}
+
+static void intface_side_windows_show(bool show)
+{
+    for (int side = 0; side < 2; side++) {
+        if (intfaceSideWindows[side] != -1) {
+            if (show) {
+                win_show(intfaceSideWindows[side]);
+            } else {
+                win_hide(intfaceSideWindows[side]);
+            }
+        }
+    }
+}
+
 // 0x4531F0
 int intface_init()
 {
@@ -401,6 +501,8 @@ int intface_init()
 
     int interfaceBarWindowX = (screenGetWidth() - INTERFACE_BAR_WIDTH) / 2;
     int interfaceBarWindowY = screenGetHeight() - INTERFACE_BAR_HEIGHT;
+
+    intface_side_windows_init(interfaceBarWindowX, interfaceBarWindowY);
 
     interfaceWindow = win_add(interfaceBarWindowX, interfaceBarWindowY, INTERFACE_BAR_WIDTH, INTERFACE_BAR_HEIGHT, colorTable[0], WINDOW_HIDDEN);
     if (interfaceWindow == -1) {
@@ -895,6 +997,8 @@ void intface_exit()
         }
     }
 
+    intface_side_windows_exit();
+
     deconstruct_box_bar_win();
 }
 
@@ -977,6 +1081,7 @@ void intface_hide()
     if (interfaceWindow != -1) {
         if (!intfaceHidden) {
             win_hide(interfaceWindow);
+            intface_side_windows_show(false);
             intfaceHidden = 1;
         }
     }
@@ -991,6 +1096,7 @@ void intface_show()
             intface_update_items(false);
             intface_update_hit_points(false);
             intface_update_ac(false);
+            intface_side_windows_show(true);
             win_show(interfaceWindow);
             intfaceHidden = false;
         }

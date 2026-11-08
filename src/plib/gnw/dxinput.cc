@@ -1,5 +1,7 @@
 #include "plib/gnw/dxinput.h"
 
+#include "plib/gnw/svga.h"
+
 namespace fallout {
 
 static bool dxinput_mouse_init();
@@ -63,7 +65,24 @@ bool dxinput_get_mouse_state(MouseData* mouseState)
     // update mouse position manually.
     SDL_PumpEvents();
 
-    Uint32 buttons = SDL_GetRelativeMouseState(&(mouseState->x), &(mouseState->y));
+    int deltaX;
+    int deltaY;
+    Uint32 buttons = SDL_GetRelativeMouseState(&deltaX, &deltaY);
+
+    // CE: Convert window-point deltas to game pixels, keeping the fractional
+    // remainder so slow movements are not lost.
+    static float remainderX = 0.0f;
+    static float remainderY = 0.0f;
+    float scaleX;
+    float scaleY;
+    svgaGetMouseScale(&scaleX, &scaleY);
+    remainderX += deltaX * scaleX;
+    remainderY += deltaY * scaleY;
+    mouseState->x = static_cast<int>(remainderX);
+    mouseState->y = static_cast<int>(remainderY);
+    remainderX -= mouseState->x;
+    remainderY -= mouseState->y;
+
     mouseState->buttons[0] = (buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;
     mouseState->buttons[1] = (buttons & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0;
     mouseState->wheelX = gMouseWheelDeltaX;

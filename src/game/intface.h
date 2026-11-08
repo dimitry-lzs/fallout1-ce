@@ -32,6 +32,9 @@ extern int interfaceWindow;
 extern int bar_window;
 
 int intface_init();
+
+// CE: Must be called before `intface_init`.
+void intface_set_side_art(int art, bool fromScreenEdges);
 void intface_reset();
 void intface_exit();
 int intface_load(DB_FILE* stream);

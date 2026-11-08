@@ -98,6 +98,17 @@ int gmovie_save(DB_FILE* stream)
     return 0;
 }
 
+// CE: See `gmovie_set_size_mode`.
+static int gmovie_size_mode = MOVIE_WINDOW_SCALE_NONE;
+
+void gmovie_set_size_mode(int mode)
+{
+    if (mode < MOVIE_WINDOW_SCALE_NONE || mode > MOVIE_WINDOW_SCALE_STRETCH) {
+        mode = MOVIE_WINDOW_SCALE_NONE;
+    }
+    gmovie_size_mode = mode;
+}
+
 // 0x44E690
 int gmovie_play(int game_movie, int game_movie_flags)
 {
@@ -117,12 +128,20 @@ int gmovie_play(int game_movie, int game_movie_flags)
         palette_fade_to(black_palette);
     }
 
-    int gameMovieWindowX = (screenGetWidth() - GAME_MOVIE_WINDOW_WIDTH) / 2;
-    int gameMovieWindowY = (screenGetHeight() - GAME_MOVIE_WINDOW_HEIGHT) / 2;
+    // CE: Scaled movies use a window covering the whole screen.
+    int gameMovieWindowWidth = GAME_MOVIE_WINDOW_WIDTH;
+    int gameMovieWindowHeight = GAME_MOVIE_WINDOW_HEIGHT;
+    if (gmovie_size_mode != MOVIE_WINDOW_SCALE_NONE) {
+        gameMovieWindowWidth = screenGetWidth();
+        gameMovieWindowHeight = screenGetHeight();
+    }
+
+    int gameMovieWindowX = (screenGetWidth() - gameMovieWindowWidth) / 2;
+    int gameMovieWindowY = (screenGetHeight() - gameMovieWindowHeight) / 2;
     int win = win_add(gameMovieWindowX,
         gameMovieWindowY,
-        GAME_MOVIE_WINDOW_WIDTH,
-        GAME_MOVIE_WINDOW_HEIGHT,
+        gameMovieWindowWidth,
+        gameMovieWindowHeight,
         0,
         WINDOW_MODAL);
     if (win == -1) {
@@ -157,6 +176,7 @@ int gmovie_play(int game_movie, int game_movie_flags)
     }
 
     movieSetFlags(movie_flags);
+    movieSetWindowScaleMode(gmovie_size_mode);
 
     int oldTextColor;
     int oldFont;
@@ -209,6 +229,7 @@ int gmovie_play(int game_movie, int game_movie_flags)
     movieStop();
     moviefx_stop();
     movieUpdate();
+    movieSetWindowScaleMode(MOVIE_WINDOW_SCALE_NONE);
     palette_set_to(black_palette);
 
     gmovie_played_list[game_movie] = 1;

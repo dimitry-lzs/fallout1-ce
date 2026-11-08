@@ -102,6 +102,39 @@ Recommendations:
 
 In time this stuff will receive in-game interface, right now you have to do it manually.
 
+### Display options
+
+All of these are optional and go into `f1_res.ini`. Keys in `[MOVIES]`, `[MAINMENU]` and `[IFACE]` use the Hi-Res Patch names, so the `f1_res.ini` shipped with the GOG release works as is.
+
+| Section | Key | Values |
+|---|---|---|
+| `MAIN` | `SCR_WIDTH`, `SCR_HEIGHT` | Window (or fullscreen) size. The game resolution is this size divided by the scale, at least 640x480. `0` fits the game to the screen. |
+| `MAIN` | `SCALE_2X` | `0` 1x, `1` 2x, `2` 3x... |
+| `MAIN` | `WINDOWED` | `1` window, `0` fullscreen. |
+| `MAIN` | `WINDOWED_FULLSCREEN` | `1` borderless desktop-sized window instead of exclusive fullscreen. |
+| `MAIN` | `KEEP_DESKTOP_MODE` | `1` exclusive fullscreen stays in the desktop display mode and scales the game, `0` switches to the closest display mode (on notched MacBooks the smaller modes sit below the notch). |
+| `MAIN` | `SCREEN_FIT` | `0` keep aspect ratio (black bars when shapes differ), `1` stretch to fill, `2` whole-number scale only. |
+| `MAIN` | `SCALE_FILTER` | `0` sharp pixels, `1` smooth (linear) scaling. |
+| `MOVIES` | `MOVIE_SIZE` | `0` original 432x320, `1` fit the screen, `2` stretch to fill. |
+| `MAINMENU` | `MAIN_MENU_SIZE` | `0` original 640x480, `1` hi-res art covering the screen (needs `HR_MAINMENU.frm` and `HR_MENU_BG.FRM`, otherwise falls back to `2`), `2` original art scaled to fit, `3` original art stretched. |
+| `IFACE` | `IFACE_BAR_MODE` | `0` map ends above the interface bar, `1` map covers the whole screen and the bar floats over it. |
+| `IFACE` | `IFACE_BAR_SIDE_ART` | Fills the space beside the bar on wide screens: `0` black, `1` metal, `2` leather (needs `HR_IFACELFT*.FRM` / `HR_IFACERHT*.FRM`). |
+| `IFACE` | `IFACE_BAR_SIDES_ORI` | `0` side art starts at the bar, `1` at the screen edges. |
+
+For example, the original 640x480 stretched over the whole screen:
+
+```ini
+[MAIN]
+SCR_WIDTH=640
+SCR_HEIGHT=480
+WINDOWED=0
+KEEP_DESKTOP_MODE=1
+SCREEN_FIT=1
+
+[MOVIES]
+MOVIE_SIZE=2
+```
+
 ## Contributing
 
 Here is a couple of current goals. Open up an issue if you have suggestion or feature request.

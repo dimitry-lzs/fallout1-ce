@@ -82,6 +82,10 @@ extern TileData* square[ELEVATION_COUNT];
 extern int display_win;
 
 int iso_init();
+void iso_set_interface_dock(bool dock);
+bool iso_is_interface_docked();
+int iso_view_height();
+bool iso_mouse_click_in_view();
 void iso_reset();
 void iso_exit();
 void map_init();

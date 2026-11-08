@@ -36,6 +36,10 @@ void gmovie_exit();
 int gmovie_load(DB_FILE* stream);
 int gmovie_save(DB_FILE* stream);
 int gmovie_play(int game_movie, int game_movie_flags);
+
+// CE: 0 - original size, 1 - fit the screen keeping the aspect ratio,
+// 2 - stretch to fill the screen (Hi-Res Patch `MOVIE_SIZE`).
+void gmovie_set_size_mode(int mode);
 bool gmovie_has_been_played(int game_movie);
 
 } // namespace fallout
