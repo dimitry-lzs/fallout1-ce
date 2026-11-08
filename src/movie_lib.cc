@@ -2799,9 +2799,15 @@ constexpr uint16_t loadUInt16LE(const uint8_t* b)
 
 constexpr uint32_t loadUInt32LE(const uint8_t* b)
 {
-    return (b[3] << 24) | (b[2] << 16) | (b[1] << 8) | b[0];
+    // Widen before shifting: `b[3]` promotes to `int`, so a byte >= 0x80
+    // would land in the sign bit and go through a signed->unsigned round trip.
+    return (static_cast<uint32_t>(b[3]) << 24) | (static_cast<uint32_t>(b[2]) << 16) | (static_cast<uint32_t>(b[1]) << 8) | static_cast<uint32_t>(b[0]);
 }
 
+// Decodes a block motion vector into a byte offset within the frame buffer:
+// low byte is the signed x delta, high byte indexes the signed row offset
+// table (`row * _mveBW`). The result spans roughly +/-128 rows, so it must
+// not be narrowed (see #136, #194).
 int getOffset(uint16_t v)
 {
     return static_cast<int8_t>(v & 0xFF) + dword_51F018[v >> 8];
