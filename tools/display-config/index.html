@@ -1,0 +1,774 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fallout display settings</title>
+<style>
+  :root {
+    --bg: #2b2c24;
+    --panel: #34352c;
+    --line: #4a4b3e;
+    --text: #e9e2cb;
+    --muted: #a7a28b;
+    --accent: #e5b53a;
+    --accent-ink: #231c06;
+    --bezel: #141511;
+    --focus: #f3d27a;
+    --radius-s: 6px;
+    --radius-l: 18px;
+    font-family: "Avenir Next Condensed", "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 16px;
+    line-height: 1.45;
+  }
+  .page { max-width: 1240px; margin: 0 auto; padding: 32px 24px 56px; }
+
+  header { margin-bottom: 28px; max-width: 62ch; }
+  h1 {
+    font-size: 40px;
+    line-height: 1.05;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0 0 8px;
+    color: var(--accent);
+  }
+  header p { margin: 0; color: var(--muted); font-size: 17px; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 28px;
+    align-items: start;
+  }
+  @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
+
+  /* Preview */
+  .stage { position: sticky; top: 16px; }
+  @media (max-width: 960px) { .stage { position: static; } }
+  .stage-bar {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 12px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+  .segmented { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius-s); overflow: hidden; }
+  .segmented label { position: relative; }
+  .segmented input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .segmented span {
+    display: block; padding: 6px 14px; font-weight: 600; color: var(--muted);
+    border-right: 1px solid var(--line);
+  }
+  .segmented label:last-child span { border-right: 0; }
+  .segmented input:checked + span { background: var(--accent); color: var(--accent-ink); }
+  .segmented input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: -3px; }
+  .segmented input:disabled + span { opacity: .4; }
+
+  .screen-pick { color: var(--muted); font-size: 15px; display: flex; gap: 8px; align-items: center; }
+
+  canvas#preview { width: 100%; height: auto; display: block; }
+  .status {
+    margin: 14px 0 0; font-size: 18px; min-height: 2.9em; max-width: 70ch;
+  }
+  .status .note { display: block; color: var(--muted); font-size: 15px; }
+
+  /* Controls */
+  .controls { display: grid; gap: 22px; }
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  legend { font-weight: 700; font-size: 20px; padding: 0; margin-bottom: 8px; }
+  .group { display: grid; gap: 12px; }
+  .field > .label { display: block; font-weight: 600; margin-bottom: 4px; }
+  .hint { display: block; color: var(--muted); font-size: 14px; margin-top: 2px; }
+
+  .presets { display: grid; gap: 2px; }
+  .preset { position: relative; display: block; border-radius: var(--radius-s); padding: 8px 12px 9px; cursor: pointer; }
+  .preset input { position: absolute; opacity: 0; }
+  .preset strong { display: block; font-weight: 600; font-size: 17px; }
+  .preset small { display: block; color: var(--muted); font-size: 14px; line-height: 1.3; }
+  .preset:hover { background: var(--panel); }
+  .preset:has(input:checked) { background: var(--panel); box-shadow: inset 3px 0 0 var(--accent); }
+  .preset:has(input:focus-visible) { outline: 2px solid var(--focus); }
+  .custom-flag { color: var(--accent); font-size: 15px; margin: 6px 12px 0; min-height: 1.4em; }
+
+  select, input[type=number] {
+    font: inherit; color: var(--text); background: var(--panel);
+    border: 1px solid var(--line); border-radius: var(--radius-s); padding: 5px 8px;
+  }
+  input[type=number] { width: 88px; }
+  select:focus-visible, input:focus-visible, button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .size-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .size-row[hidden] { display: none; }
+  .check { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+  .check input { margin-top: 5px; accent-color: var(--accent); }
+  .disabled { opacity: .45; }
+
+  details { border-top: 1px solid var(--line); padding-top: 14px; }
+  summary { cursor: pointer; font-weight: 700; font-size: 20px; list-style-position: outside; }
+  details[open] summary { margin-bottom: 12px; }
+
+  /* Output */
+  .output {
+    margin-top: 40px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 28px; border-top: 1px solid var(--line); padding-top: 28px;
+  }
+  @media (max-width: 960px) { .output { grid-template-columns: 1fr; } }
+  h2 { font-size: 24px; margin: 0 0 10px; }
+  pre {
+    margin: 0; background: var(--bezel); border-radius: var(--radius-s); padding: 14px 16px;
+    font: 13px/1.5 ui-monospace, Menlo, monospace; color: #d7d0b8; overflow: auto; max-height: 360px;
+  }
+  .actions { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  button {
+    font: inherit; font-weight: 700; font-size: 17px; border-radius: var(--radius-s);
+    padding: 8px 18px; cursor: pointer; border: 1px solid var(--accent);
+  }
+  .primary { background: var(--accent); color: var(--accent-ink); }
+  .secondary { background: transparent; color: var(--accent); }
+  ol { margin: 0; padding-left: 1.3em; max-width: 60ch; }
+  ol li { margin-bottom: 8px; }
+  code { font-family: ui-monospace, Menlo, monospace; font-size: .85em; background: var(--panel); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  .muted { color: var(--muted); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .preset, .segmented span { transition: background-color .12s; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>Fallout display settings</h1>
+    <p>Pick how the game should use your screen, check it in the preview, then save the file into the game folder.</p>
+  </header>
+
+  <div class="layout">
+    <section class="stage" aria-label="Preview">
+      <div class="stage-bar">
+        <div class="segmented" role="radiogroup" aria-label="Preview scene">
+          <label><input type="radio" name="scene" value="game" checked><span>In game</span></label>
+          <label><input type="radio" name="scene" value="menu"><span>Main menu</span></label>
+          <label><input type="radio" name="scene" value="movie"><span>Movies</span></label>
+        </div>
+        <label class="screen-pick">Preview on
+          <select id="screen"></select>
+        </label>
+      </div>
+      <canvas id="preview" width="1200" height="820" role="img" aria-describedby="status"></canvas>
+      <p class="status" id="status" aria-live="polite"></p>
+    </section>
+
+    <form class="controls" id="controls" onsubmit="return false">
+      <fieldset>
+        <legend>Presets</legend>
+        <div class="presets" id="presets"></div>
+        <p class="custom-flag" id="customFlag"></p>
+      </fieldset>
+
+      <details open>
+        <summary>Screen</summary>
+        <div class="group">
+          <div class="field">
+            <span class="label" id="displayLabel">Display</span>
+            <div class="segmented" role="radiogroup" aria-labelledby="displayLabel">
+              <label><input type="radio" name="display" value="fullscreen"><span>Fullscreen</span></label>
+              <label><input type="radio" name="display" value="borderless"><span>Borderless</span></label>
+              <label><input type="radio" name="display" value="window"><span>Window</span></label>
+            </div>
+            <span class="hint" id="displayHint"></span>
+          </div>
+          <div class="field">
+            <label class="label" for="resolution">Resolution</label>
+            <select id="resolution" name="resolution">
+              <option value="auto">Fit the screen</option>
+              <option value="original">Original 640×480</option>
+              <option value="custom">Custom size</option>
+            </select>
+            <div class="size-row" id="sizeRow">
+              <input type="number" name="width" min="640" max="7680" step="1" aria-label="Width in points">
+              <span>×</span>
+              <input type="number" name="height" min="480" max="4320" step="1" aria-label="Height in points">
+              <span class="muted">points</span>
+            </div>
+          </div>
+          <div class="field">
+            <label class="label" for="scale">Pixel size</label>
+            <select id="scale" name="scale">
+              <option value="1">1× (more to see, smaller UI)</option>
+              <option value="2">2×</option>
+              <option value="3">3×</option>
+            </select>
+          </div>
+          <label class="check" id="keepRow">
+            <input type="checkbox" name="keepDesktopMode">
+            <span>Keep the desktop display mode<span class="hint">Off switches the display to the closest real mode, like the original game.</span></span>
+          </label>
+        </div>
+      </details>
+
+      <details open>
+        <summary>Picture</summary>
+        <div class="group">
+          <div class="field">
+            <label class="label" for="fit">Fit to screen</label>
+            <select id="fit" name="fit">
+              <option value="0">Keep the shape (bars if needed)</option>
+              <option value="1">Stretch to fill</option>
+              <option value="2">Whole pixels only (bars around)</option>
+            </select>
+          </div>
+          <label class="check">
+            <input type="checkbox" name="smooth">
+            <span>Smooth scaling<span class="hint">Softens pixels when the picture is scaled by an uneven amount.</span></span>
+          </label>
+        </div>
+      </details>
+
+      <details open>
+        <summary>HUD</summary>
+        <div class="group">
+          <div class="field">
+            <span class="label" id="hudLabel">Bar style</span>
+            <div class="segmented" role="radiogroup" aria-labelledby="hudLabel">
+              <label><input type="radio" name="hud" value="bar"><span>Bar at the bottom</span></label>
+              <label><input type="radio" name="hud" value="dock"><span>Dock over the map</span></label>
+            </div>
+          </div>
+          <div class="field" id="sideRow">
+            <label class="label" for="sideArt">Beside the bar</label>
+            <select id="sideArt" name="sideArt">
+              <option value="0">Black</option>
+              <option value="1">Metal panels</option>
+              <option value="2">Leather belt</option>
+            </select>
+            <label class="check" style="margin-top:8px">
+              <input type="checkbox" name="sidesFromEdges">
+              <span>Start the panels at the screen edges</span>
+            </label>
+            <span class="hint" id="sideHint"></span>
+          </div>
+        </div>
+      </details>
+
+      <details open>
+        <summary>Menus and movies</summary>
+        <div class="group">
+          <div class="field">
+            <label class="label" for="menu">Main menu</label>
+            <select id="menu" name="menu">
+              <option value="0">Original size</option>
+              <option value="1">Hi-res, fills the screen</option>
+              <option value="2">Original art, scaled up</option>
+              <option value="3">Original art, stretched</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="label" for="movies">Movies</label>
+            <select id="movies" name="movies">
+              <option value="0">Original size</option>
+              <option value="1">Fit the screen</option>
+              <option value="2">Stretch to fill</option>
+            </select>
+          </div>
+        </div>
+      </details>
+    </form>
+  </div>
+
+  <section class="output" aria-label="Settings file">
+    <div>
+      <h2>f1_res.ini</h2>
+      <pre id="ini"></pre>
+      <div class="actions">
+        <button type="button" class="primary" id="download">Download f1_res.ini</button>
+        <button type="button" class="secondary" id="copy">Copy</button>
+      </div>
+    </div>
+    <div>
+      <h2>Use it</h2>
+      <ol>
+        <li>Download the file, or copy its text.</li>
+        <li>Put it in the game folder, next to <code>master.dat</code>, replacing the old <code>f1_res.ini</code>.</li>
+        <li>Start the game. Settings are read at launch, so quit first if it is running.</li>
+      </ol>
+      <p class="muted">The preview uses art from your own game. Run <code>python3 extract_assets.py /path/to/Fallout</code> once next to this page; without it the preview draws placeholders.</p>
+    </div>
+  </section>
+</div>
+
+<script src="presets.js"></script>
+<script>
+"use strict";
+
+// ---- Screens the preview can simulate (sizes in points) -------------------
+// `modes` are display modes an exclusive fullscreen can switch to. On notched
+// MacBooks the 16:10 modes sit below the notch, leaving that strip black.
+const COMMON_MODES = [[1920,1080],[1680,1050],[1600,900],[1440,900],[1280,1024],[1280,800],[1280,720],[1024,768],[800,600],[640,480]];
+const SCREENS = {
+  fhd: { name: "1080p monitor (1920×1080)", w: 1920, h: 1080, density: 1, notchH: 0, modes: COMMON_MODES },
+  qhd: { name: "1440p monitor (2560×1440)", w: 2560, h: 1440, density: 1, notchH: 0, modes: [[2560,1440],[1920,1200],[1920,1080]].concat(COMMON_MODES) },
+  uhd: { name: "4K monitor at 200% (3840×2160)", w: 1920, h: 1080, density: 2, notchH: 0, modes: COMMON_MODES },
+  wuxga: { name: "16:10 monitor (1920×1200)", w: 1920, h: 1200, density: 1, notchH: 0, modes: [[1920,1200]].concat(COMMON_MODES) },
+  ultrawide: { name: "Ultrawide (3440×1440)", w: 3440, h: 1440, density: 1, notchH: 0, modes: [[3440,1440],[2560,1440],[2560,1080]].concat(COMMON_MODES) },
+  laptop: { name: "Laptop (1366×768)", w: 1366, h: 768, density: 1, notchH: 0, modes: [[1366,768],[1280,720],[1024,768],[800,600],[640,480]] },
+  deck: { name: "Steam Deck (1280×800)", w: 1280, h: 800, density: 1, notchH: 0, modes: [[1280,800],[1280,720],[1024,768],[800,600],[640,480]] },
+  mba13: {
+    name: "MacBook Air 13″ (1470×956)", w: 1470, h: 956, density: 2, notchH: 33, notchW: 190,
+    modes: [[2560,1664],[2560,1600],[2048,1332],[2048,1280],[1920,1200],[1710,1112],[1710,1068],[1470,956],[1470,918],[1280,832],[1280,800],[1024,666],[1024,640],[960,600]],
+  },
+  mbp14: {
+    name: "MacBook Pro 14″ (1512×982)", w: 1512, h: 982, density: 2, notchH: 33, notchW: 200,
+    modes: [[1800,1169],[1800,1125],[1512,982],[1512,945],[1352,878],[1352,845],[1147,745],[1147,717],[1024,665],[1024,640]],
+  },
+};
+
+// "This display": the screen the page is shown on, if it is not one of the above.
+(() => {
+  const w = window.screen.width, h = window.screen.height;
+  const known = Object.keys(SCREENS).find(k => SCREENS[k].w === w && SCREENS[k].h === h && SCREENS[k].density === Math.round(window.devicePixelRatio || 1));
+  const select = document.getElementById("screen");
+  if (!known && w >= 640 && h >= 480) {
+    SCREENS.current = { name: `This display (${w}×${h})`, w, h, density: Math.round(window.devicePixelRatio || 1), notchH: 0, modes: [[w, h]].concat(COMMON_MODES.filter(m => m[0] <= w && m[1] <= h)) };
+  }
+  for (const [key, screen] of Object.entries(SCREENS)) {
+    const option = new Option(key === known ? `${screen.name}, this display` : screen.name, key);
+    select.add(option, key === "current" ? 0 : null);
+  }
+  select.value = SCREENS.current ? "current" : known || "fhd";
+})();
+
+// ---- Assets ------------------------------------------------------------------
+// From extract_assets.py, except world.png and movie.png which are optional
+// captures. Missing images are drawn as placeholders.
+const ASSET_NAMES = ["world", "movie", "bar", "side_lft1", "side_rht1", "side_lft2", "side_rht2", "menu_bg", "menu_button", "menu_hires_bg", "menu_hires_panel"];
+const img = {};
+const loaded = Promise.all(ASSET_NAMES.map(n => new Promise(res => {
+  const i = new Image();
+  i.onload = () => res();
+  i.onerror = () => { i.missing = true; res(); };
+  i.src = `assets/${n}.png`;
+  img[n] = i;
+})));
+
+// ---- State -------------------------------------------------------------------
+const form = document.getElementById("controls");
+let state = presetSettings(PRESETS[0]);
+let activePreset = PRESETS[0].id;
+try {
+  const saved = JSON.parse(localStorage.getItem("fallout-display") || "null");
+  if (saved && saved.state) { state = Object.assign({}, DEFAULTS, saved.state); activePreset = saved.preset || null; }
+} catch (e) { /* storage unavailable: start from the first preset */ }
+
+function save() {
+  try { localStorage.setItem("fallout-display", JSON.stringify({ state, preset: activePreset })); } catch (e) {}
+}
+
+// ---- Presets list --------------------------------------------------------------
+const presetsEl = document.getElementById("presets");
+PRESETS.forEach(p => {
+  const label = document.createElement("label");
+  label.className = "preset";
+  label.innerHTML = `<input type="radio" name="preset" value="${p.id}"><strong></strong><small></small>`;
+  label.querySelector("strong").textContent = p.name;
+  label.querySelector("small").textContent = p.about;
+  presetsEl.appendChild(label);
+});
+presetsEl.addEventListener("change", e => {
+  const p = PRESETS.find(x => x.id === e.target.value);
+  state = presetSettings(p);
+  activePreset = p.id;
+  syncForm();
+  update();
+});
+
+// ---- Form <-> state ------------------------------------------------------------
+function syncForm() {
+  for (const el of form.elements) {
+    if (!el.name || el.name === "preset" || !(el.name in state)) continue;
+    const v = state[el.name];
+    if (el.type === "radio") el.checked = String(v) === el.value;
+    else if (el.type === "checkbox") el.checked = !!v;
+    else el.value = String(v);
+  }
+  for (const r of form.querySelectorAll('input[name=preset]')) r.checked = r.value === activePreset;
+}
+
+form.addEventListener("input", e => {
+  const el = e.target;
+  if (!el.name || el.name === "preset") return;
+  let v;
+  if (el.type === "checkbox") v = el.checked;
+  else if (el.type === "number") {
+    v = parseInt(el.value, 10);
+    if (!Number.isFinite(v)) return;
+  } else v = /^\d+$/.test(el.value) && el.name !== "resolution" ? parseInt(el.value, 10) : el.value;
+  state[el.name] = v;
+  const match = PRESETS.find(p => JSON.stringify(presetSettings(p)) === JSON.stringify(state));
+  activePreset = match ? match.id : null;
+  for (const r of form.querySelectorAll('input[name=preset]')) r.checked = r.value === activePreset;
+  update();
+});
+
+for (const r of document.querySelectorAll('input[name=scene]')) r.addEventListener("change", update);
+document.getElementById("screen").addEventListener("change", update);
+
+// ---- Engine maths (mirrors svga.cc / game.cc) -----------------------------------
+function requestedSize(s) {
+  if (s.resolution === "original") return [640 * s.scale, 480 * s.scale];
+  if (s.resolution === "custom") return [Math.max(1, s.width | 0), Math.max(1, s.height | 0)];
+  return null;
+}
+
+function simulate(s, scr) {
+  const req = requestedSize(s);
+  const r = { notchStrip: false, modeSwitch: null };
+  // Region of the screen the game owns, in points.
+  if (s.display === "window") {
+    const ww = req ? req[0] : 640 * s.scale;
+    const wh = req ? req[1] : 480 * s.scale;
+    r.window = true;
+    r.w = ww; r.h = wh;
+    r.x = (scr.w - ww) / 2;
+    r.y = Math.max(scr.notchH + 28, (scr.h - wh) / 2 + 14);
+    r.pxW = ww * scr.density; r.pxH = wh * scr.density;
+  } else if (s.display === "borderless") {
+    r.x = 0; r.y = scr.notchH; r.w = scr.w; r.h = scr.h - scr.notchH;
+    r.notchStrip = scr.notchH > 0;
+    r.pxW = r.w * scr.density; r.pxH = r.h * scr.density;
+  } else if (!req || s.keepDesktopMode) {
+    r.x = 0; r.y = 0; r.w = scr.w; r.h = scr.h;
+    r.pxW = r.w * scr.density; r.pxH = r.h * scr.density;
+  } else {
+    const fits = scr.modes.filter(m => m[0] >= req[0] && m[1] >= req[1]);
+    const mode = fits.length ? fits.reduce((a, b) => a[0] * a[1] <= b[0] * b[1] ? a : b) : scr.modes[0];
+    r.modeSwitch = mode;
+    const below = scr.notchH > 0 && Math.abs(mode[1] / mode[0] - 0.625) < 0.002;
+    r.x = 0; r.y = below ? scr.notchH : 0; r.w = scr.w; r.h = below ? scr.h - scr.notchH : scr.h;
+    r.notchStrip = below;
+    r.pxW = mode[0] * scr.density; r.pxH = mode[1] * scr.density;
+  }
+  // Game resolution.
+  if (!req) {
+    const winH = s.display === "window" ? 480 * s.scale : (s.display === "fullscreen" ? scr.h : r.h);
+    const winW = s.display === "window" ? 640 * s.scale : (s.display === "fullscreen" ? scr.w : r.w);
+    r.gh = Math.max(Math.floor(winH / s.scale), 480);
+    r.gw = Math.max(Math.floor(winW * r.gh / winH), 640);
+  } else {
+    r.gw = Math.max(Math.floor(req[0] / s.scale), 640);
+    r.gh = Math.max(Math.floor(req[1] / s.scale), 480);
+  }
+  // Picture rectangle inside the region, as a fraction of the region.
+  let iw, ih;
+  if (s.fit === 1) { iw = r.pxW; ih = r.pxH; }
+  else {
+    let k = Math.min(r.pxW / r.gw, r.pxH / r.gh);
+    if (s.fit === 2 && k >= 1) k = Math.floor(k);
+    iw = r.gw * k; ih = r.gh * k;
+  }
+  r.img = { x: (r.pxW - iw) / 2 / r.pxW, y: (r.pxH - ih) / 2 / r.pxH, w: iw / r.pxW, h: ih / r.pxH };
+  r.stretch = s.fit === 1 ? (r.pxW / r.gw) / (r.pxH / r.gh) : 1;
+  return r;
+}
+
+// ---- Game frames, drawn at game resolution -------------------------------------
+const frame = document.createElement("canvas");
+const fctx = frame.getContext("2d");
+
+const has = name => img[name] && !img[name].missing && img[name].naturalWidth > 0;
+
+// Placeholder for the map: an isometric grid on dark ground.
+function drawWorldPlaceholder(w, h) {
+  fctx.fillStyle = "#26251f"; fctx.fillRect(0, 0, w, h);
+  fctx.strokeStyle = "#34332a"; fctx.lineWidth = 1;
+  for (let x = -h * 2; x < w + h * 2; x += 32) {
+    fctx.beginPath(); fctx.moveTo(x, 0); fctx.lineTo(x + h * 1.33, h); fctx.stroke();
+    fctx.beginPath(); fctx.moveTo(x, 0); fctx.lineTo(x - h * 1.33, h); fctx.stroke();
+  }
+  fctx.fillStyle = "#4b6a9a"; fctx.fillRect(w / 2 - 4, h / 2 - 22, 8, 22);
+}
+
+function drawGame(s, w, h) {
+  const dock = s.hud === "dock";
+  const viewH = dock ? h : h - 100;
+  fctx.save();
+  fctx.beginPath(); fctx.rect(0, 0, w, viewH); fctx.clip();
+  // The camera centres the player in the map view.
+  if (has("world")) fctx.drawImage(img.world, Math.round(w / 2 - img.world.width / 2), Math.round(viewH / 2 - img.world.height / 2));
+  else drawWorldPlaceholder(w, viewH);
+  fctx.restore();
+  const bx = Math.floor((w - 640) / 2), by = h - 100;
+  if (!dock && s.sideArt > 0) {
+    tile(`side_lft${s.sideArt}`, 0, bx, by, !s.sidesFromEdges);
+    tile(`side_rht${s.sideArt}`, bx + 640, w, by, s.sidesFromEdges);
+  }
+  if (has("bar")) fctx.drawImage(img.bar, bx, by);
+  else placeholderPanel(bx, by, 640, 100);
+}
+
+function placeholderPanel(x, y, w, h) {
+  fctx.fillStyle = "#6b6248"; fctx.fillRect(x, y, w, h);
+  fctx.strokeStyle = "#3b3627"; fctx.lineWidth = 2; fctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+}
+
+// Repeats side art across [x0, x1); anchored at x1 when `anchorRight`, else at x0.
+function tile(name, x0, x1, y, anchorRight) {
+  if (x1 <= x0) return;
+  if (!has(name)) { placeholderPanel(x0, y, x1 - x0, 100); return; }
+  const art = img[name];
+  fctx.save();
+  fctx.beginPath(); fctx.rect(x0, y, x1 - x0, 100); fctx.clip();
+  if (anchorRight) for (let x = x1 - art.width; x > x0 - art.width; x -= art.width) fctx.drawImage(art, x, y);
+  else for (let x = x0; x < x1; x += art.width) fctx.drawImage(art, x, y);
+  fctx.restore();
+}
+
+// Draws the main menu content on `c` in original 640x480 units, shifted by
+// (dx, dy) for the right-hand part and with the bottom text at `bottom`.
+const MENU_LABELS = ["INTRO", "NEW GAME", "LOAD GAME", "CREDITS", "EXIT"];
+function drawMenuContent(c, dx, dy, bottom, hires) {
+  if (hires) {
+    if (has("menu_hires_panel")) c.drawImage(img.menu_hires_panel, dx + 401, dy + 21);
+    else { c.fillStyle = "#5e5a45"; c.fillRect(dx + 401, dy + 21, 219, 281); }
+  }
+  c.textBaseline = "top";
+  c.textAlign = "center";
+  c.font = '700 17px "Avenir Next Condensed", "Arial Narrow", sans-serif';
+  MENU_LABELS.forEach((label, i) => {
+    const y = dy + i * 41 + 45;
+    if (has("menu_button")) c.drawImage(img.menu_button, dx + 425, y);
+    else { c.fillStyle = "#8a1d14"; c.beginPath(); c.arc(dx + 438, y + 13, 9, 0, 7); c.fill(); }
+    c.fillStyle = "#c9a33d";
+    c.fillText(label, dx + 520, y + 2);
+  });
+  c.font = '500 9px "Avenir Next Condensed", "Arial Narrow", sans-serif';
+  c.fillStyle = "#a99a74";
+  c.textAlign = "left";
+  c.fillText("Copyright (c) 1997 Interplay Productions. All rights reserved.", 15, bottom - 20);
+  c.textAlign = "right";
+  c.fillText("FALLOUT 1.1", dx + 615, bottom - 20);
+}
+
+// The original menu as one 640x480 image.
+const menu640 = document.createElement("canvas");
+menu640.width = 640; menu640.height = 480;
+function originalMenu() {
+  const c = menu640.getContext("2d");
+  c.fillStyle = "#2f2b22"; c.fillRect(0, 0, 640, 480);
+  if (has("menu_bg")) c.drawImage(img.menu_bg, 0, 0);
+  drawMenuContent(c, 0, 0, 480, false);
+  return menu640;
+}
+
+function drawMenu(s, w, h) {
+  const m = s.menu;
+  if (m === 0) { fctx.drawImage(originalMenu(), Math.floor((w - 640) / 2), Math.floor((h - 480) / 2)); return; }
+  if (m === 2 || m === 3) {
+    const sx = m === 3 ? w / 640 : Math.min(w / 640, h / 480);
+    const sy = m === 3 ? h / 480 : sx;
+    fctx.drawImage(originalMenu(), (w - 640 * sx) / 2, (h - 480 * sy) / 2, 640 * sx, 480 * sy);
+    return;
+  }
+  // Hi-res: background covers the screen, content on a layer scaled to the screen.
+  if (has("menu_hires_bg")) {
+    const bg = img.menu_hires_bg;
+    const k = Math.max(w / bg.width, h / bg.height);
+    fctx.drawImage(bg, (w - bg.width * k) / 2, (h - bg.height * k) / 2, bg.width * k, bg.height * k);
+  } else {
+    fctx.fillStyle = "#3a3529"; fctx.fillRect(0, 0, w, h);
+  }
+  const s2 = Math.min(w / 640, h / 480);
+  const lw = Math.max(Math.floor(w / s2), 640), lh = Math.max(Math.floor(h / s2), 480);
+  fctx.save();
+  fctx.translate((w - lw * s2) / 2, (h - lh * s2) / 2);
+  fctx.scale(s2, s2);
+  drawMenuContent(fctx, lw - 640, (lh - 480) / 2, lh, true);
+  fctx.restore();
+}
+
+function drawMovie(s, w, h) {
+  const frameW = 432, frameH = 320;
+  let x = Math.floor((w - frameW) / 2), y = Math.floor((h - frameH) / 2), fw = frameW, fh = frameH;
+  if (s.movies === 2) { x = 0; y = 0; fw = w; fh = h; }
+  else if (s.movies === 1) {
+    const k = Math.min(w / frameW, h / frameH);
+    fw = Math.floor(frameW * k); fh = Math.floor(frameH * k);
+    x = Math.floor((w - fw) / 2); y = Math.floor((h - fh) / 2);
+  }
+  if (has("movie")) { fctx.drawImage(img.movie, x, y, fw, fh); return; }
+  const g = fctx.createLinearGradient(0, y, 0, y + fh);
+  g.addColorStop(0, "#8c7a5a"); g.addColorStop(0.6, "#4a3f2e"); g.addColorStop(1, "#1f1b14");
+  fctx.fillStyle = g; fctx.fillRect(x, y, fw, fh);
+  fctx.fillStyle = "rgba(255,255,255,.7)";
+  fctx.font = `600 ${Math.max(10, fh / 14)}px "Avenir Next Condensed", sans-serif`;
+  fctx.textAlign = "center"; fctx.textBaseline = "middle";
+  fctx.fillText("Movie (432×320)", x + fw / 2, y + fh / 2);
+}
+
+// ---- Preview -------------------------------------------------------------------
+const canvas = document.getElementById("preview");
+const ctx = canvas.getContext("2d");
+
+function roundRect(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+}
+
+function render(s, scr, r, scene) {
+  const cssW = canvas.clientWidth || 800;
+  const bezel = 14;
+  const k = (cssW - bezel * 2) / scr.w;
+  const cssH = Math.round(scr.h * k + bezel * 2);
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(cssW * dpr); canvas.height = Math.round(cssH * dpr);
+  canvas.style.height = cssH + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  // Bezel and black panel.
+  ctx.fillStyle = "#141511"; roundRect(ctx, 0, 0, cssW, cssH, 18); ctx.fill();
+  const sx = bezel, sy = bezel, sw = scr.w * k, sh = scr.h * k;
+  ctx.fillStyle = "#000"; ctx.fillRect(sx, sy, sw, sh);
+
+  if (r.window) {
+    // Desktop behind the window.
+    const g = ctx.createLinearGradient(0, sy, 0, sy + sh);
+    g.addColorStop(0, "#4b5a63"); g.addColorStop(1, "#2c3338");
+    ctx.fillStyle = g; ctx.fillRect(sx, sy, sw, sh);
+    ctx.fillStyle = "rgba(20,20,20,.55)"; ctx.fillRect(sx, sy, sw, (scr.notchH || 24) * k);
+    const tx = sx + r.x * k, ty = sy + r.y * k;
+    ctx.fillStyle = "#3a3a3a"; ctx.fillRect(tx, ty - 28 * k, r.w * k, 28 * k);
+    ["#ff5f57", "#febc2e", "#28c840"].forEach((c, i) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(tx + (14 + i * 20) * k, ty - 14 * k, 6 * k, 0, 7); ctx.fill(); });
+    ctx.fillStyle = "#000"; ctx.fillRect(tx, ty, r.w * k, r.h * k);
+  }
+
+  // Game frame at game resolution.
+  frame.width = r.gw; frame.height = r.gh;
+  fctx.imageSmoothingEnabled = false;
+  fctx.fillStyle = "#000"; fctx.fillRect(0, 0, r.gw, r.gh);
+  if (scene === "game") drawGame(s, r.gw, r.gh);
+  else if (scene === "menu") drawMenu(s, r.gw, r.gh);
+  else drawMovie(s, r.gw, r.gh);
+
+  const rx = sx + r.x * k, ry = sy + r.y * k, rw = r.w * k, rh = r.h * k;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.save();
+  ctx.beginPath(); ctx.rect(rx, ry, rw, rh); ctx.clip();
+  ctx.drawImage(frame, rx + r.img.x * rw, ry + r.img.y * rh, r.img.w * rw, r.img.h * rh);
+  ctx.restore();
+
+  // Notch.
+  if (scr.notchH) {
+    const nw = scr.notchW * k, nh = scr.notchH * k * 0.92;
+    ctx.fillStyle = "#000";
+    roundRect(ctx, sx + (sw - nw) / 2, sy - 2, nw, nh + 2, 9 * k); ctx.fill();
+  }
+}
+
+// ---- Status sentence -----------------------------------------------------------
+function describe(s, scr, r, scene) {
+  const main = [];
+  const notes = [];
+  const eps = 0.004;
+  const barsX = r.img.x > eps, barsY = r.img.y > eps;
+  const where = barsX && barsY ? "all around" : barsX ? "left and right" : "top and bottom";
+  let lead = `The game runs at ${r.gw}×${r.gh}`;
+  if (r.window) lead += ` in a ${r.w}×${r.h} window`;
+  if (barsX || barsY) main.push(`${lead}, with black bars ${where}.`);
+  else if (r.window) main.push(`${lead}, filling it.`);
+  else if (r.notchStrip) main.push(`${lead} and fills the screen below the notch.`);
+  else main.push(`${lead} and fills the whole screen.`);
+
+  if (r.window && (r.w > scr.w || r.h + 28 > scr.h)) notes.push("The window is bigger than this screen, so part of it will be off-screen.");
+  if (r.notchStrip) notes.push("macOS keeps the strip beside the notch black in this mode.");
+  if (r.modeSwitch) notes.push(`The display switches to ${r.modeSwitch[0]}×${r.modeSwitch[1]} while you play.`);
+  if (Math.abs(r.stretch - 1) > 0.02) notes.push(`Pixels are stretched ${Math.round(Math.abs(r.stretch - 1) * 100)}% ${r.stretch > 1 ? "wider" : "taller"} than square.`);
+  if (scene === "menu" && s.menu === 0 && (r.gw > 640 || r.gh > 480)) notes.push("The main menu stays 640×480 in the middle at this resolution.");
+  if (scene === "menu" && s.menu === 2 && (r.gw * 3 !== r.gh * 4)) notes.push("The scaled menu keeps its 4:3 shape, so it has margins.");
+  if (r.modeSwitch && !scr.notchH && r.modeSwitch[0] * scr.h !== r.modeSwitch[1] * scr.w) notes.push("How a mode of a different shape fills the panel depends on the monitor's own scaling setting.");
+  if (scene === "movie" && s.movies === 0) notes.push("Fallout's movies are 432×320, so at original size they are small.");
+  if (scene === "game" && s.hud === "bar" && s.sideArt === 0 && r.gw > 640) notes.push("The space beside the HUD bar is black.");
+  if (scene === "game" && r.gw > 640) notes.push("Inventory, Pip-Boy and other full-screen panels stay 640×480 in the middle.");
+  return { main: main.join(" "), notes };
+}
+
+// ---- Wiring --------------------------------------------------------------------
+const iniEl = document.getElementById("ini");
+
+function updateEnabled(s) {
+  const exclusive = s.display === "fullscreen";
+  const keep = form.elements.keepDesktopMode;
+  keep.disabled = !(exclusive && s.resolution !== "auto");
+  document.getElementById("keepRow").classList.toggle("disabled", keep.disabled);
+  const size = s.resolution === "custom";
+  for (const n of ["width", "height"]) form.elements[n].disabled = !size;
+  document.getElementById("sizeRow").hidden = !size;
+  const docked = s.hud === "dock";
+  form.elements.sideArt.disabled = docked;
+  form.elements.sidesFromEdges.disabled = docked || s.sideArt === 0;
+  document.getElementById("sideRow").classList.toggle("disabled", docked);
+  document.getElementById("sideHint").textContent = docked ? "Not used while the HUD is docked: the map shows beside it." : "";
+  document.getElementById("displayHint").textContent =
+    s.display === "borderless" ? "A desktop-sized window. On notched Macs it sits below the notch." :
+    s.display === "window" ? "Size comes from Resolution; Fit the screen gives 640×480 × pixel size." : "";
+}
+
+function update() {
+  const scr = SCREENS[document.getElementById("screen").value];
+  const scene = document.querySelector('input[name=scene]:checked').value;
+  updateEnabled(state);
+  const r = simulate(state, scr);
+  render(state, scr, r, scene);
+  const d = describe(state, scr, r, scene);
+  const status = document.getElementById("status");
+  status.textContent = d.main;
+  for (const n of d.notes) { const span = document.createElement("span"); span.className = "note"; span.textContent = n; status.appendChild(span); }
+  const preset = PRESETS.find(p => p.id === activePreset);
+  iniEl.textContent = toIni(state, preset ? preset.name : "Custom settings");
+  document.getElementById("customFlag").textContent = preset ? "" : "Custom settings, based on your changes.";
+  save();
+}
+
+document.getElementById("copy").addEventListener("click", async e => {
+  const btn = e.currentTarget;
+  const text = iniEl.textContent;
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch (err) {
+    const ta = document.createElement("textarea");
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand("copy"); } catch (e2) {}
+    ta.remove();
+  }
+  btn.textContent = ok ? "Copied" : "Copy failed, select the text instead";
+  setTimeout(() => { btn.textContent = "Copy"; }, 1600);
+});
+
+document.getElementById("download").addEventListener("click", () => {
+  const blob = new Blob([iniEl.textContent.replace(/\n/g, "\r\n")], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "f1_res.ini";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+
+window.addEventListener("resize", () => update());
+// Optional link form: index.html#preset=widest&scene=menu&screen=fhd
+(() => {
+  const q = new URLSearchParams(location.hash.slice(1));
+  const p = PRESETS.find(x => x.id === q.get("preset"));
+  if (p) { state = presetSettings(p); activePreset = p.id; }
+  const scene = document.querySelector(`input[name=scene][value="${q.get("scene")}"]`);
+  if (scene) scene.checked = true;
+  if (q.get("screen") in SCREENS) document.getElementById("screen").value = q.get("screen");
+})();
+
+syncForm();
+loaded.then(update);
+update();
+</script>
+</body>
+</html>

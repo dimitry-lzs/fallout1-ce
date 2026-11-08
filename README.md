@@ -135,6 +135,22 @@ SCREEN_FIT=1
 MOVIE_SIZE=2
 ```
 
+### Display settings page
+
+`tools/display-config/index.html` is a small page for picking these settings. It has presets (fill the screen, docked HUD, original 640x480 in several fits, legacy mode switch, window), a preview of the result on common screens (1080p, 1440p, 4K, 16:10, ultrawide, 1366x768 laptop, Steam Deck, MacBook Air and Pro, or the display the page is open on), and writes the `f1_res.ini` to copy or download. The preview says what to expect: the game resolution, where black bars appear, whether the display changes mode.
+
+1. Optionally extract preview art from your copy of the game (Python 3, nothing to install). Without it the preview draws placeholders.
+
+   ```console
+   $ python3 tools/display-config/extract_assets.py /path/to/Fallout
+   ```
+
+   The art goes into `tools/display-config/assets/` and is not part of the repository. The map view and movie frame cannot be extracted; put a `world.png` (an in-game screenshot without the interface bar) and a `movie.png` (432x320) there to use your own.
+
+2. Open `tools/display-config/index.html` in a browser, pick a preset or change settings, then download `f1_res.ini` and put it in the game folder next to `master.dat`. Settings are read when the game starts.
+
+`node tools/display-config/presets.js /path/to/Fallout` writes every preset into a `display-presets` folder there, plus the default one as `f1_res.ini`.
+
 ## Contributing
 
 Here is a couple of current goals. Open up an issue if you have suggestion or feature request.
