@@ -22,6 +22,10 @@ if (NOT sdl2_POPULATED)
     FetchContent_Populate(sdl2)
 endif()
 
+# SDL 2.26.1 declares cmake_minimum_required(VERSION 3.0), which CMake 4
+# rejects. Scoped to this directory, so only the SDL subproject is affected.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+
 add_subdirectory(${sdl2_SOURCE_DIR} ${sdl2_BINARY_DIR} EXCLUDE_FROM_ALL)
 
 set(SDL2_INCLUDE_DIRS ${sdl2_SOURCE_DIR} ${sdl2_BINARY_DIR} PARENT_SCOPE)
